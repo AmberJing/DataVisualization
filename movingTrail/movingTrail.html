@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html style="height: 100%">
+   <head>
+       <meta charset="utf-8">
+   </head>
+   <body style="height: 100%; margin: 0">
+
+
+        <input type="file"onchange="importExcel(this)" />
+
+
+       <div id="container" style="height: 400px; width:80%;margin:100px auto"></div>
+
+       <script type="text/javascript" src="js/jquery-3.3.1.js"></script>
+        <script src="http://oss.sheetjs.com/js-xlsx/xlsx.full.min.js"></script>
+
+       <script type="text/javascript" src="http://echarts.baidu.com/gallery/vendors/echarts/echarts.min.js"></script>
+       
+       <script type="text/javascript">
+        /*
+    FileReader共有4种读取方法：
+    1.readAsArrayBuffer(file)：将文件读取为ArrayBuffer。
+    2.readAsBinaryString(file)：将文件读取为二进制字符串
+    3.readAsDataURL(file)：将文件读取为Data URL
+    4.readAsText(file, [encoding])：将文件读取为文本，encoding缺省值为'UTF-8'
+                 */
+    var wb;//读取完成的数据
+    var rABS = false; //是否将文件读取为二进制字符串
+    var dataUnit=[];
+
+    function importExcel(obj) {//导入
+        if(!obj.files) {
+            return;
+        }
+        const IMPORTFILE_MAXSIZE = 1*1024;//这里可以自定义控制导入文件大小
+        var suffix = obj.files[0].name.split(".")[1]
+        if(suffix != 'xls' && suffix !='xlsx'){
+            alert('导入的文件格式不正确!')
+            return
+        }
+        if(obj.files[0].size/1024 > IMPORTFILE_MAXSIZE){
+            alert('导入的表格文件不能大于1M')
+            return
+        }
+        var f = obj.files[0];
+        var reader = new FileReader();
+
+        reader.onload = function(e) {
+            var data = e.target.result;
+            if(rABS) {
+                wb = XLSX.read(btoa(fixdata(data)), {//手动转化
+                    type: 'base64'
+                });
+            } else {
+                wb = XLSX.read(data, {
+                    type: 'binary'
+                });
+            }
+            //wb.SheetNames[0]是获取Sheets中第一个Sheet的名字
+            //wb.Sheets[Sheet名]获取第一个Sheet的数据
+            var dataJSON = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]]);
+            var oddY=[],evenX=[];
+
+            for (var i = 0; i < dataJSON.length; i++) {
+                if(i % 2 === 0) {
+                   evenX.push(dataJSON[i].r.substring(2,dataJSON[i].r.length-2)); 
+                } else {
+                    oddY.push(dataJSON[i].r.substring(2,dataJSON[i].r.length-2));
+                }
+            }
+            var length = evenX.length > oddY.length?evenX.length:oddY.length;
+            for (var i = 0; i < length; i++) {
+                dataUnit[i] = [evenX[i],oddY[i]];
+            }
+            /*console.log(evenX);
+            console.log(oddY);
+            console.log(dataUnit);*/
+
+
+            // document.getElementById("demo").innerHTML= JSON.stringify(dataJSON);
+
+
+            var dom = document.getElementById("container");
+            var myChart = echarts.init(dom);
+            var app = {};
+            option = null;
+            var links = dataUnit.map(function (item, idx) {
+                        return {
+                            source: idx,
+                            target: idx + 1
+                        };
+                    });
+                    links.pop();
+            option = {
+                title: {
+                    text: 'ECharts 入门示例'
+                },
+                tooltip: {},
+                legend: {
+                    data:['运动轨迹']
+                },
+                xAxis: { // X轴数据(根据系列的data值)
+                    name:'cm',
+                    type: 'value'
+                },
+                yAxis: { // y轴数据(根据系列的data值)
+                    name:'cm',
+                    type: 'value'
+                },
+                series: [{ // 通过使用 series[i] 来表示系列列表
+                    name: '运动轨迹',
+                    type: 'scatter', // 表示散点图类型
+                    smooth: true, // 曲线平滑
+                    coordinateSystem: 'cartesian2d',// 直角坐标系
+                    links: links,
+                    data: dataUnit, // 描述的数据
+                    animationDelay: function (idx) {
+                            return idx * 100;
+                        }
+                }]
+            };
+
+            if (option && typeof option === "object") {
+                myChart.setOption(option, true);
+            }
+
+        };
+        if(rABS) {
+            reader.readAsArrayBuffer(f);
+        } else {
+            reader.readAsBinaryString(f);
+        }
+    }
+
+    function fixdata(data) { //文件流转BinaryString
+        var o = "",
+            l = 0,
+            w = 10240;
+        for(; l < data.byteLength / w; ++l) o += String.fromCharCode.apply(null, new Uint8Array(data.slice(l * w, l * w + w)));
+        o += String.fromCharCode.apply(null, new Uint8Array(data.slice(l * w)));
+        return o;
+    }
+
+
+
+        
+       </script>
+   </body>
+</html>

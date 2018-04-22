@@ -28,156 +28,181 @@
     <!-- 上传Excel表格-->
     <div class="wrapper">
         <h3>请选择要上传的excel文件</h3>
-        <input type="file" onchange="importExcel(this)" />
+        <input type="file" class="file">
         <p class="info"></p>
     </div>
-    
     
     <!-- ECharts 图标显示容器 -->
     <div id="container"></div>
     
     <!-- 引入需要的js -->
-    <script type="text/javascript" src="jquery-3.3.1.js"></script> <!-- jQuery -->
     <script src="http://oss.sheetjs.com/js-xlsx/xlsx.full.min.js"></script> <!-- SheetJS的js-xlsx -->
     <script type="text/javascript" src="http://echarts.baidu.com/gallery/vendors/echarts/echarts.min.js"></script> <!-- ECharts -->
 
     <script type="text/javascript">
-        /*
-            FileReader共有4种读取方法：
-            1.readAsArrayBuffer(file)：将文件读取为ArrayBuffer。
-            2.readAsBinaryString(file)：将文件读取为二进制字符串
-            3.readAsDataURL(file)：将文件读取为Data URL
-            4.readAsText(file, [encoding])：将文件读取为文本，encoding缺省值为'UTF-8'
+    window.onload = function() {
 
-        */
-    var wb;//读取完成的数据
-    var rABS = false; //是否将文件读取为二进制字符串
-    var dataUnit=[];
-
-    function importExcel(obj) {//导入
-
-        // 判断是否有文件
-        if(!obj.files) {
-            return;
-        }
-
-        const IMPORTFILE_MAXSIZE = 1*1024;// 定义导入文件大小
-
-        var suffix = obj.files[0].name.split(".")[1]; // 截取后缀名
-
-        // 判断文件格式是否正确
-        if(suffix != 'xls' && suffix !='xlsx'){
-            alert('导入的文件格式不正确!');
-            return;
-        }
-
-        // 判断文件大小是否超过限制
-        if(obj.files[0].size/1024 > IMPORTFILE_MAXSIZE){
-            alert('导入的表格文件不能大于1M');
-            return;
-        }
-
-        var f = obj.files[0];
-        var reader = new FileReader();  // h5提供的File API
-        var info = document.getElementsByClassName('info');
+        var fileDom = document.getElementsByClassName('file')[0]; // 获取DOM对象
         
-        // FileReader最有用的三个事件：progress、error和load.
-        // progress: 是否又读取了新数据
-        // error：是否发生了错误
-        reader.onerror = function(){
-            info.innerHTML = "读取文件失败，请重试！";
-        };
+        fileDom.onchange = function () {
+        
+            // 判断是否有文件
+            if(!this.files) {
+                return;
+            }
+            
+            const IMPORTFILE_MAXSIZE = 1*1024;// 定义导入文件大小
+            var file = this.files[0]; // 获取传入文件
+            var fileSuffix = file.name.split(".")[1]; // 获取后缀名
+            var fileSize = file.size / 1024; // 文件大小(kb)
+            var rABS = false; //是否将文件读取为二进制字符串
+            var dataUnit=[]; // 用于ECharts
+            
+            var infoDom = document.getElementsByClassName('info')[0]; // 获取DOM对象
 
-        // load: 是否读完了整个文件
-        reader.onload = function(e) {
-            var data = e.target.result;
+            // 判断文件格式是否正确
+            if(fileSuffix != 'xls' && fileSuffix !='xlsx'){
+                alert('导入的文件格式不正确!');
+                return;
+            }
+
+            // 判断文件大小是否超过限制
+            if( fileSize > IMPORTFILE_MAXSIZE){
+                alert('导入的表格文件不能大于1M');
+                return;
+            }
+            
+            /*
+                FileReader共有4种读取方法(结果都保存在result属性中)：
+                1.readAsText(file, [encoding])：将文件读取为文本，encoding缺省值为'UTF-8'(读文本)
+                2.readAsDataURL(file)：将文件读取为Data URL(读图片)
+                3.readAsArrayBuffer(file)：将文件读取为ArrayBuffer。
+                4.readAsBinaryString(file)：将文件读取为二进制字符串
+
+                FileReader提供事件监听文件读取情况，常用的有以下三个：
+                1.progress: 是否读取了新数据
+                2.error: 是否发生了错误
+                3.load: 是否读完了整个文件
+            */
+
+            // 创建对象
+            var reader = new FileReader();
+
+            // 读取文件
             if(rABS) {
-                wb = XLSX.read(btoa(fixdata(data)), {//手动转化
-                    type: 'base64'
-                });
-            } else {
-                wb = XLSX.read(data, {
-                    type: 'binary'
-                });
+                reader.readAsBinaryString(file);
+            } else { 
+                reader.readAsArrayBuffer(file);
             }
 
-            var sheetName = wb.SheetNames[0]; //是获取Sheets中第一个Sheet的名字
-            var sheetData = wb.Sheets[sheetName]; //获取第一个Sheet的数据
+            // 监听读取发生错误
+            reader.onerror = function(){
+                infoDom.innerHTML = "读取文件失败，请重试！";
+            };
 
-            // 将表数据转换为JSON
-            var dataJSON = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]]);
-            var oddY=[],evenX=[];
-            
-            // 提取并处理需要的数据
-            for (var i = 0; i < dataJSON.length; i++) {
-                if(i % 2 === 0) {
-                   evenX.push(dataJSON[i].r.substring(2,dataJSON[i].r.length-2)); 
+            // 监听读取完成
+            reader.onload = function() {
+
+                // 读取结果存储在reader.result中
+                var result = reader.result;
+
+                // 是否读取为二进制
+                if(rABS) {
+                    // 通过js-xlsx解析
+                    result = XLSX.read(result, {
+                        type: 'binary'
+                    });
                 } else {
-                    oddY.push(dataJSON[i].r.substring(2,dataJSON[i].r.length-2));
+                    //手动转化
+                    var temp = fixdata(result); 
+                    // 通过js-xlsx解析
+                    result = XLSX.read(btoa(temp), {
+                        type: 'base64'
+                    });
                 }
+                
+                // 获取excel中第一个Sheet的名字
+                var sheetName = result.SheetNames[0];
+                //获取第一个Sheet的数据 
+                var sheetData = result.Sheets[sheetName]; 
+
+                // 将表数据转换为JSON
+                var dataJSON = XLSX.utils.sheet_to_json(result.Sheets[result.SheetNames[0]]);
+                var oddY=[],evenX=[];
+                
+                // 提取并处理需要的数据
+                for (var i = 0; i < dataJSON.length; i++) {
+                    if(i % 2 === 0) {
+                       evenX.push(dataJSON[i].r.substring(2,dataJSON[i].r.length-2)); 
+                    } else {
+                        oddY.push(dataJSON[i].r.substring(2,dataJSON[i].r.length-2));
+                    }
+                }
+                
+                // 转换为ECharts需要的数组
+                for (var i = 0; i < (evenX.length > oddY.length?evenX.length:oddY.length); i++) {
+                    dataUnit[i] = [evenX[i],oddY[i]];
+                }
+                
+                // 渲染成表格
+                renderChart(dataUnit);
+            };
+        }
+        
+        
+        //文件流转BinaryString
+        function fixdata(data) { 
+            var o = "",
+                l = 0,
+                w = 10240;
+            for(; l < data.byteLength / w; ++l) o += String.fromCharCode.apply(null, new Uint8Array(data.slice(l * w, l * w + w)));
+            o += String.fromCharCode.apply(null, new Uint8Array(data.slice(l * w)));
+            return o;
+        }
+        
+        // 生成ECharts图表格
+        function renderChart(dataUnit){
+
+            // 获取DOM对象
+            var dom = document.getElementById("container");
+
+            // 创建myChart对象
+            var myChart = echarts.init(dom);
+
+            // 配置图表参数
+            var option = {
+                title: {
+                    text: '运动轨迹'
+                },
+                tooltip: {},
+                legend: {
+                    data:['运动轨迹']
+                },
+                xAxis: { // X轴数据(根据系列的data值)
+                    name:'cm',
+                    type: 'value'
+                },
+                yAxis: { // y轴数据(根据系列的data值)
+                    name:'cm',
+                    type: 'value'
+                },
+                series: [{ // 通过使用 series[i] 来表示系列列表
+                    name: '运动轨迹',
+                    type: 'scatter', // 表示散点图类型
+                    smooth: true, // 曲线平滑
+                    coordinateSystem: 'cartesian2d',// 直角坐标系
+                    data: dataUnit, // 描述的数据
+                    animationDelay: function (idx) {
+                        return idx * 100;
+                    }
+                }]
+            };
+
+            if (option && typeof option === "object") {
+                myChart.setOption(option, true);
             }
-            
-            // 转换为ECharts需要的数组
-            for (var i = 0; i < (evenX.length > oddY.length?evenX.length:oddY.length); i++) {
-                dataUnit[i] = [evenX[i],oddY[i]];
-            }
-            
-            // 渲染成表格
-            renderChart(dataUnit);
-        };
-        if(rABS) {
-            reader.readAsArrayBuffer(f);
-        } else {
-            reader.readAsBinaryString(f);
         }
     }
-
-    function fixdata(data) { //文件流转BinaryString
-        var o = "",
-            l = 0,
-            w = 10240;
-        for(; l < data.byteLength / w; ++l) o += String.fromCharCode.apply(null, new Uint8Array(data.slice(l * w, l * w + w)));
-        o += String.fromCharCode.apply(null, new Uint8Array(data.slice(l * w)));
-        return o;
-    }
-
-    function renderChart(dataUnit){
-        var dom = document.getElementById("container");
-        var myChart = echarts.init(dom);
-        var option = {
-            title: {
-                text: '运动轨迹'
-            },
-            tooltip: {},
-            legend: {
-                data:['运动轨迹']
-            },
-            xAxis: { // X轴数据(根据系列的data值)
-                name:'cm',
-                type: 'value'
-            },
-            yAxis: { // y轴数据(根据系列的data值)
-                name:'cm',
-                type: 'value'
-            },
-            series: [{ // 通过使用 series[i] 来表示系列列表
-                name: '运动轨迹',
-                type: 'scatter', // 表示散点图类型
-                smooth: true, // 曲线平滑
-                coordinateSystem: 'cartesian2d',// 直角坐标系
-                data: dataUnit, // 描述的数据
-                animationDelay: function (idx) {
-                    return idx * 100;
-                }
-            }]
-        };
-
-        if (option && typeof option === "object") {
-            myChart.setOption(option, true);
-        }
-
-    }
-
     </script>
 </body>
 </html>
